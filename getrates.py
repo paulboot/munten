@@ -1,10 +1,19 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #
 # COPYRIGHT
 
+# Dependancies
+# sudo apt-get update
+# sudo apt-get install build-essential
+# sudo apt-get install python3-dev
+# sudo pip3 install scrapy
+
 
 from secret import *
+import scrapy
+import requests
+from bs4 import BeautifulSoup
 import time
 import sys
 import ssl
@@ -13,6 +22,24 @@ import datetime
 import logging
 import json
 from influxdb import InfluxDBClient
+
+
+
+
+
+class AllianzSpider(scrapy.Spider):
+    name = "allianz_spider"
+    start_urls = [URL1]
+
+    def parse(self, response):
+        FONDS_SELECTOR = '.az-mdl-rateChange'
+        for fonds in response.css(FONDS_SELECTOR):
+            NAME_SELECTOR = 'a::text'
+            yield {
+                'name': fonds.css('a::text').extract_first(),
+                'rate': fonds.css('.az-cmp-rateChange::text').extract_first(),
+            }
+
 
 
 
@@ -74,15 +101,31 @@ def main():
     parser = argparse.ArgumentParser(description="AMQP client")
     parser.add_argument('--version', action='version', version='1.0')
     args = parser.parse_args()
-    
-    queue_name = user + ':' + datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    credentials = pika.PlainCredentials(user, password)
+
+    page = requests.get(URL1)
+    soup = BeautifulSoup(page.text, 'html.parser')
+
+    payload = "FondsAllianz,currency=€ "
+    fonds_list = soup.find_all(class_='az-mdl-rateChange')
+    for fonds in fonds_list:
+        nameStr = fonds.find('a').string.replace("Allianz ", "")
+        (currencyStr, valueStr) = fonds.find(class_='az-cmp-rateChange').string.split()
+        payload += nameStr.replace(" ", "_") + "=" + valueStr + ","
+        print(timenownano(), nameStr, currencyStr, valueStr)
+
+    payload = payload[:-1] + " " + str(timenownano())
+    print(payload)
+
+    sys.exit()
 
     influxDbClient = setupdb(influxDbHost, influxDbPort, influxDbUser, influxDbPassword, influxDbName)
 
-    getgata()
 
-    insertgata()
+
+
+    getdata()
+
+    insertdata()
 
     try:
         # Setup our ssl options
