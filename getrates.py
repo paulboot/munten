@@ -11,36 +11,15 @@
 
 
 from secret import *
-import scrapy
 import requests
 from bs4 import BeautifulSoup
 import time
 import sys
-import ssl
 import argparse
 import datetime
 import logging
 import json
 from influxdb import InfluxDBClient
-
-
-
-
-
-class AllianzSpider(scrapy.Spider):
-    name = "allianz_spider"
-    start_urls = [URL1]
-
-    def parse(self, response):
-        FONDS_SELECTOR = '.az-mdl-rateChange'
-        for fonds in response.css(FONDS_SELECTOR):
-            NAME_SELECTOR = 'a::text'
-            yield {
-                'name': fonds.css('a::text').extract_first(),
-                'rate': fonds.css('.az-cmp-rateChange::text').extract_first(),
-            }
-
-
 
 
 def timenownano():
@@ -98,20 +77,19 @@ def callback(ch, method, properties, body):
 def main():
     logging.basicConfig(level=logging.INFO)
     
-    parser = argparse.ArgumentParser(description="AMQP client")
+    parser = argparse.ArgumentParser(description="Webscraper and output in Influx line protocol")
     parser.add_argument('--version', action='version', version='1.0')
     args = parser.parse_args()
 
     page = requests.get(URL1)
     soup = BeautifulSoup(page.text, 'html.parser')
 
-    payload = "FondsAllianz,currency=€ "
+    payload = "rates,currency=€ "
     fonds_list = soup.find_all(class_='az-mdl-rateChange')
     for fonds in fonds_list:
         nameStr = fonds.find('a').string.replace("Allianz ", "")
         (currencyStr, valueStr) = fonds.find(class_='az-cmp-rateChange').string.split()
-        payload += nameStr.replace(" ", "_") + "=" + valueStr + ","
-        print(timenownano(), nameStr, currencyStr, valueStr)
+        payload += nameStr.replace(" ", "\ ").replace(",","\,") + "=" + valueStr + ","
 
     payload = payload[:-1] + " " + str(timenownano())
     print(payload)
